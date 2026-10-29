@@ -25,6 +25,8 @@ from reportlab.platypus import (
 )
 
 from ultralytics import YOLO
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 # =========================================================
@@ -136,7 +138,10 @@ def initialize_database():
 
 
 def save_inspection(filename, detections, inference_ms):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    timestamp = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
+    
 
     class_names = [
         detection["class"]
