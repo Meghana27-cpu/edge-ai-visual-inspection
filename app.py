@@ -38,6 +38,174 @@ st.set_page_config(
     page_icon="🏭",
     layout="wide",
 )
+st.markdown("""
+<style>
+    /* ---------- Brand and workspace ---------- */
+    :root {
+        --ei-navy: #10233f;
+        --ei-blue: #2563eb;
+        --ei-blue-hover: #1d4ed8;
+        --ei-bg: #f5f7fb;
+        --ei-border: #e2e8f0;
+        --ei-text: #172b4d;
+        --ei-muted: #64748b;
+    }
+    
+    
+    /* Hide Streamlit radio indicators */
+    [data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child {
+            display: none !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"] > div {
+            display: none !important;
+    }
+
+    /* Make navigation items look like clean menu links */
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+            padding: 10px 12px !important;
+            border-radius: 8px !important;
+            margin-bottom: 4px !important;
+            cursor: pointer !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+            background-color: #1d3556 !important;
+    }
+
+
+    .stApp {
+        background: var(--ei-bg);
+        color: var(--ei-text);
+    }
+
+    .block-container {
+        max-width: 1450px;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    /* ---------- Typography ---------- */
+    h1, h2, h3 {
+        color: var(--ei-text);
+        font-weight: 650;
+        letter-spacing: -0.4px;
+    }
+
+    p, label {
+        line-height: 1.55;
+    }
+
+    /* ---------- Sidebar ---------- */
+    [data-testid="stSidebar"] {
+        background: var(--ei-navy);
+        border-right: 1px solid #243a58;
+    }
+
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] span {
+        color: #f1f5f9;
+    }
+
+    [data-testid="stSidebar"] hr {
+        border-color: #344761;
+    }
+
+    /* ---------- Sidebar navigation ---------- */
+    [data-testid="stSidebar"] [role="radiogroup"] {
+        gap: 8px;
+    }
+
+    [data-testid="stSidebar"] [role="radio"] {
+        background: transparent;
+        border-radius: 8px;
+        padding: 9px 10px;
+    }
+
+    [data-testid="stSidebar"] [role="radio"]:hover {
+        background: #1d3556;
+    }
+
+    /* ---------- Metric cards ---------- */
+    [data-testid="stMetric"] {
+        background: #ffffff;
+        border: 1px solid var(--ei-border);
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 3px 10px rgba(16, 35, 63, 0.04);
+    }
+
+    [data-testid="stMetricLabel"] {
+        color: var(--ei-muted);
+        font-size: 0.88rem;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: var(--ei-navy);
+        font-weight: 700;
+    }
+
+    /* ---------- Buttons ---------- */
+    .stButton > button,
+    .stDownloadButton > button {
+        border-radius: 8px;
+        min-height: 40px;
+        font-weight: 600;
+        transition: border-color 0.15s ease;
+    }
+
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {
+        border-color: var(--ei-blue);
+        color: var(--ei-blue);
+    }
+
+    /* ---------- Upload area ---------- */
+    [data-testid="stFileUploader"] {
+        background: #ffffff;
+        border: 1px dashed #b7c6d9;
+        border-radius: 12px;
+        padding: 12px;
+    }
+
+    /* ---------- Tables and charts ---------- */
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--ei-border);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    [data-testid="stTable"] {
+        border-radius: 10px;
+    }
+
+    /* ---------- Expanders and status messages ---------- */
+    [data-testid="stExpander"] {
+        background: #ffffff;
+        border: 1px solid var(--ei-border);
+        border-radius: 10px;
+    }
+
+    [data-testid="stAlert"] {
+        border-radius: 10px;
+    }
+
+    /* ---------- Footer ---------- */
+    .ei-footer {
+        text-align: center;
+        color: var(--ei-muted);
+        font-size: 0.85rem;
+        padding: 20px 0 8px;
+        border-top: 1px solid var(--ei-border);
+        margin-top: 32px;
+    }
+</style>
+""", unsafe_allow_html=True)
+    
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "models" / "best.pt"
@@ -138,8 +306,7 @@ def initialize_database():
 
 
 def save_inspection(filename, detections, inference_ms):
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
+    
     timestamp = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
     
 
@@ -435,7 +602,17 @@ def generate_inspection_pdf(
 
 st.sidebar.title("🏭 EdgeInspect AI")
 st.sidebar.caption("AI-powered steel surface inspection")
-
+selected_page = st.sidebar.radio(
+    "Navigation",
+    [
+        "🔍 Inspect Image",
+        "📊 Dashboard & History",
+        "⚡ CPU vs GPU Performance",
+        "🎯 Model Evaluation",
+        "ℹ️ About",
+    ],
+    label_visibility="collapsed",
+)
 st.sidebar.markdown("---")
 st.sidebar.subheader("System Status")
 
@@ -476,26 +653,13 @@ st.write(
     "for Automated Industrial Defect Detection"
 )
 
-(
-    inspect_tab,
-    dashboard_tab,
-    performance_tab,
-    evaluation_tab,
-    about_tab,
-) = st.tabs([
-    "🔍 Inspect Image",
-    "📊 Dashboard & History",
-    "⚡ CPU vs GPU Performance",
-    "🎯 Model Evaluation",
-    "ℹ️ About",
-])
 
 
 # =========================================================
 # 7. IMAGE INSPECTION
 # =========================================================
 
-with inspect_tab:
+if selected_page == "🔍 Inspect Image":
 
     st.subheader("Steel Surface Defect Inspection")
 
@@ -773,7 +937,7 @@ with inspect_tab:
 # TAB 2: DASHBOARD & INSPECTION HISTORY
 # ============================================================
 
-with dashboard_tab:
+if selected_page == "📊 Dashboard & History":
 
     st.header("📊 Inspection Dashboard")
 
@@ -925,7 +1089,7 @@ with dashboard_tab:
 # TAB 3: CPU VS GPU PERFORMANCE
 # ============================================================
 
-with performance_tab:
+if selected_page == "⚡ CPU vs GPU Performance":
 
     st.header("⚡ CPU vs GPU Performance Comparison")
 
@@ -1099,7 +1263,7 @@ with performance_tab:
 # TAB 4: MODEL EVALUATION
 # ============================================================
 
-with evaluation_tab:
+if selected_page == "🎯 Model Evaluation":
 
     st.header("🎯 Model Evaluation")
 
@@ -1306,7 +1470,7 @@ with evaluation_tab:
 # TAB 5: ABOUT THE PROJECT
 # ============================================================
 
-with about_tab:
+if selected_page == "ℹ️ About":
 
     st.header("ℹ️ About the Project")
 
@@ -1458,7 +1622,21 @@ with about_tab:
 
 st.markdown("---")
 
-st.caption(
-    "Industrial Defect Detection | "
-    "Powered by Python, PyTorch, YOLO26 and Streamlit"
-)
+footer_col1, footer_col2, footer_col3 = st.columns(3)
+
+with footer_col1:
+    st.caption("🏭 **EdgeInspect AI**")
+    st.caption("AI-powered steel defect detection")
+
+with footer_col2:
+    if st.button("ℹ️ About", key="footer_about"):
+        st.session_state["footer_about_clicked"] = True
+
+    if st.session_state.get("footer_about_clicked", False):
+        st.info(
+            "EdgeInspect AI uses YOLO26n and the NEU-DET "
+            "dataset to detect steel surface defect candidates."
+        )
+
+with footer_col3:
+    st.caption("Built with Python, PyTorch & Streamlit")
