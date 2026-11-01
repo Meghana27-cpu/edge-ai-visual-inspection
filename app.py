@@ -596,6 +596,74 @@ def generate_inspection_pdf(
 
     return pdf_buffer.getvalue()
 
+
+    
+def check_image_quality(image):
+    """
+    Check image quality before defect inspection.
+    Returns advisory warnings; it does not reject images.
+    """
+    import numpy as np
+
+    warnings = []
+
+    width, height = image.size
+    gray = np.asarray(image.convert("L"), dtype=np.float32)
+
+    # 1. Image resolution
+    if width < 200 or height < 200:
+        warnings.append(
+            f"Low resolution: {width} × {height}. "
+            "Use an image at least 200 × 200 pixels if possible."
+        )
+
+    # 2. Brightness
+    brightness = float(np.mean(gray))
+
+    if brightness < 40:
+        warnings.append(
+            "Image may be too dark. Improve the lighting and retake it if possible."
+        )
+    elif brightness > 215:
+        warnings.append(
+            "Image may be overexposed. Reduce glare or lighting and retake it if possible."
+        )
+
+    # 3. Contrast
+    contrast = float(np.std(gray))
+
+    if contrast < 25:
+        warnings.append(
+            "Low contrast: surface details may be difficult to distinguish."
+        )
+
+    # 4. Blur estimate using the variance of the Laplacian
+    padded = np.pad(gray, 1, mode="edge")
+
+    laplacian = (
+        padded[:-2, 1:-1]
+        + padded[2:, 1:-1]
+        + padded[1:-1, :-2]
+        + padded[1:-1, 2:]
+        - 4 * gray
+    )
+
+    blur_score = float(np.var(laplacian))
+
+    if blur_score < 50:
+        warnings.append(
+            "Image may be blurry. Keep the camera steady and refocus if possible."
+        )
+
+    return {
+        "width": width,
+        "height": height,
+        "brightness": round(brightness, 2),
+        "contrast": round(contrast, 2),
+        "blur_score": round(blur_score, 2),
+        "warnings": warnings,
+    }
+
 # =========================================================
 # 5. SIDEBAR
 # =========================================================
@@ -633,14 +701,47 @@ confidence_threshold = st.sidebar.slider(
     "Confidence threshold",
     min_value=0.10,
     max_value=0.95,
-    value=0.45,
+    value=0.30,
     step=0.05,
     help="Only predictions at or above this confidence are displayed.",
 )
 
 st.sidebar.caption(f"Image size: {IMAGE_SIZE} × {IMAGE_SIZE}")
 st.sidebar.caption(f"Active device: {DEVICE_NAME}")
+st.sidebar.divider()
 
+with st.sidebar.expander("ℹ️ About the Project"):
+    st.markdown("""
+    **EdgeInspect AI**
+
+    Real-Time Edge-AI Visual Inspection System
+    for Automated Industrial Defect Detection.
+
+    **Model:** YOLO26n
+
+    **Dataset:** NEU-DET
+
+    **Image Size:** 640 × 640
+
+    **Defect Classes:**
+    - Crazing
+    - Inclusion
+    - Patches
+    - Pitted Surface
+    - Rolled-in Scale
+    - Scratches
+
+    **Technologies:**
+    - Python
+    - Streamlit
+    - PyTorch
+    - OpenCV
+    - SQLite
+
+    **Disclaimer:** This is a project prototype.
+    Predictions should be verified before
+    production quality-control decisions.
+    """)
 
 # =========================================================
 # 6. MAIN HEADER AND TABS
@@ -656,75 +757,220 @@ st.write(
 
 
 # =========================================================
-# 7. IMAGE INSPECTION
+# 7. IMAGE INSPECTION - MULTI-IMAGE / PER-VIEW RESULTS
 # =========================================================
 
 if selected_page == "🔍 Inspect Image":
 
     st.subheader("Steel Surface Defect Inspection")
+    st.write(
+        "Upload or capture images of the steel products. "
+        "Assign a view to image and inspect them."
+    )
 
     if not MODEL_PATH.exists():
-
         st.error(
-            "Model file is missing. Place your trained best.pt file "
-            "inside the project's models folder."
+            "Model file is missing. Place your trained best.pt "
+            "file inside the project's models folder."
         )
 
     else:
+        
+        
+        # Initialize camera session state
+        if "camera_images" not in st.session_state:
+            st.session_state.camera_images = []
 
-        uploaded_file = st.file_uploader(
-            "Upload a steel surface image",
-            type=["jpg", "jpeg", "png", "bmp"],
-            key="inspection_uploader",
-        )
+        if "camera_slot" not in st.session_state:
+            st.session_state.camera_slot = 0
 
-        if uploaded_file is not None:
+        if "show_camera" not in st.session_state:
+            st.session_state.show_camera = False
+            
+        # Display captured images
+        if st.session_state.camera_images:
+            st.markdown("### Captured Images")
 
-            original_image = Image.open(
-                uploaded_file
-            ).convert("RGB")
+            for image_data in st.session_state.camera_images:
+                st.image(image_data["bytes"], caption=image_data["name"])
+        # Create two columns
+        upload_col, camera_col = st.columns(2)
+        with upload_col:
+            st.markdown("### 📁 Upload Image")
 
-            st.image(
-                original_image,
-                caption="Uploaded steel surface image",
-                width=500,
+            uploaded_files = st.file_uploader(
+                "Choose images from your device",
+                type=["jpg", "jpeg", "png", "bmp"],
+                accept_multiple_files=True,
+                key="multi_inspection_uploader"
+            )
+
+        with camera_col:
+            st.markdown("### 📷 Take Photo")
+
+            if st.button("📸 Open Camera", use_container_width=True):
+                st.session_state.show_camera = True
+                st.rerun()
+
+        # Camera opens only after clicking the button
+        if st.session_state.show_camera:
+            st.markdown("### Capture Steel Surface")
+
+            camera_photo = st.camera_input(
+                "Take a photo",
+                key=f"camera_capture_{st.session_state.camera_slot}"
+            )
+
+            if camera_photo is not None:
+                if st.button("➕ Add Photo to Batch"):
+                    st.session_state.camera_images.append({
+                        "name": f"captured_image_{len(st.session_state.camera_images) + 1}.jpg",
+                        "bytes": camera_photo.getvalue()
+                    })
+
+                    st.session_state.camera_slot += 1
+                    st.session_state.show_camera = False
+                    st.rerun()
+
+            if st.button("✖ Close Camera"):
+                st.session_state.show_camera = False
+                st.rerun()
+
+            for i, image_data in enumerate(st.session_state.camera_images):
+                st.image(
+                    image_data["bytes"],
+                    caption=image_data["name"],
+                    width=200
+                )
+
+            if st.button("🗑️ Clear Captured Images"):
+                st.session_state.camera_images = []
+                st.session_state.camera_slot = 0
+                st.rerun()
+
+
+        
+        # Combine uploaded and captured images
+        inspection_files = list(uploaded_files or [])
+
+        for image_data in st.session_state.camera_images:
+            image_file = io.BytesIO(image_data["bytes"])
+            image_file.name = image_data["name"]
+            inspection_files.append(image_file)
+
+        view_options = [
+            "Front", "Back", "Left", "Right",
+            "Top", "Bottom", "Other"
+        ]
+
+        if inspection_files:
+            st.markdown("### Uploaded Images")
+            st.caption(
+                "Choose the camera view for each image before inspection."
+            )
+
+            view_by_file = {}
+
+            for index, uploaded_file in enumerate(inspection_files):
+                file_key = f"{uploaded_file.name}_{index}"
+
+                col_image, col_details = st.columns([1, 2])
+
+                with col_image:
+                    preview = Image.open(uploaded_file).convert("RGB")
+                    
+                    quality = check_image_quality(preview)
+
+                    st.caption(
+                        f"Image size: {quality['width']} × {quality['height']} pixels"
+                    )
+
+                with st.expander("📷 Image Quality Check", expanded=True):
+                    if quality["warnings"]:
+                        for warning in quality["warnings"]:
+                            st.warning(warning)
+                    else:
+                            st.success("No obvious image-quality issues detected.")
+
+                            st.caption(
+                                    f"Brightness: {quality['brightness']} | "
+                                    f"Contrast: {quality['contrast']} | "
+                                    f"Sharpness score: {quality['blur_score']}"
+                            )
+
+                    st.image(
+                        preview,
+                        caption=uploaded_file.name,
+                        use_container_width=True
+                    )
+
+                with col_details:
+                    selected_view = st.selectbox(
+                        f"View for {uploaded_file.name}",
+                        view_options,
+                        key=f"view_{file_key}"
+                    )
+
+                    view_by_file[file_key] = selected_view
+                    st.caption(
+                        f"Image dimensions: {preview.width} × {preview.height}"
+                    )
+
+            
+            button_label = (
+                "🔍 Inspect Image"
+                if len(inspection_files) == 1
+                else "🔍 Inspect All Images"
             )
 
             if st.button(
-                "🔍 Inspect Image",
+                button_label,
                 type="primary",
-                key="inspect_button",
+                key="inspect_all_images"
             ):
-
                 try:
+                    model = load_model(str(MODEL_PATH))
+                    all_results = []
 
-                    with st.spinner("Running YOLO26 inspection..."):
+                    progress = st.progress(0)
+                    status = st.empty()
 
-                        model = load_model(str(MODEL_PATH))
+                    for index, uploaded_file in enumerate(inspection_files):
+                        file_key = f"{uploaded_file.name}_{index}"
+                        selected_view = view_by_file[file_key]
 
-                        # Warm up the model once per session/device.
+                        status.write(
+                            f"Inspecting image {index + 1} of "
+                            f"{len(inspection_files)}: {uploaded_file.name}"
+                        )
+
+                        original_image = Image.open(
+                            uploaded_file
+                        ).convert("RGB")
+                        # Save original image for comparison
+                        original_buffer = io.BytesIO()
+
+                        original_image.save(
+                            original_buffer,
+                            format="PNG"
+                        )
+
+                        original_bytes = original_buffer.getvalue()
+                        # Warm up YOLO once per session/device.
                         warmup_key = f"warmed_{DEVICE}"
-
-                        if not st.session_state.get(
-                            warmup_key, False
-                        ):
-
+                        if not st.session_state.get(warmup_key, False):
                             model.predict(
                                 source=original_image,
                                 imgsz=IMAGE_SIZE,
                                 conf=confidence_threshold,
                                 device=DEVICE,
                                 half=GPU_AVAILABLE,
-                                verbose=False,
+                                verbose=False
                             )
-
                             synchronize_gpu()
-
                             st.session_state[warmup_key] = True
 
-                        # Measure the prediction call.
                         synchronize_gpu()
-
                         start_time = time.perf_counter()
 
                         results = model.predict(
@@ -733,20 +979,16 @@ if selected_page == "🔍 Inspect Image":
                             conf=confidence_threshold,
                             device=DEVICE,
                             half=GPU_AVAILABLE,
-                            verbose=False,
+                            verbose=False
                         )
 
                         synchronize_gpu()
-
                         inference_ms = (
                             time.perf_counter() - start_time
                         ) * 1000
 
                         result = results[0]
-
-                        # Convert prediction image from BGR to RGB.
                         annotated_array = result.plot()
-
                         annotated_image = Image.fromarray(
                             annotated_array[:, :, ::-1]
                         )
@@ -754,184 +996,212 @@ if selected_page == "🔍 Inspect Image":
                         detections = []
 
                         if result.boxes is not None:
-
                             for box in result.boxes:
-
-                                class_id = int(
-                                    box.cls[0].item()
-                                )
-
-                                confidence = float(
-                                    box.conf[0].item()
-                                )
-
+                                class_id = int(box.cls[0].item())
+                                confidence = float(box.conf[0].item())
                                 bbox = [
                                     round(float(value), 2)
                                     for value in box.xyxy[0].tolist()
                                 ]
 
-                                class_name = result.names.get(
-                                    class_id,
-                                    f"class_{class_id}",
-                                )
-
                                 detections.append({
-                                    "class": class_name,
+                                    "class": result.names.get(
+                                        class_id, f"class_{class_id}"
+                                    ),
                                     "confidence": confidence,
-                                    "bbox": bbox,
+                                    "bbox": bbox
                                 })
 
-                        # Save the annotated image in memory.
                         image_buffer = io.BytesIO()
-
-                        annotated_image.save(
-                            image_buffer,
-                            format="PNG",
-                        )
-
+                        annotated_image.save(image_buffer, format="PNG")
                         annotated_bytes = image_buffer.getvalue()
 
-                        # Save inspection and detection details to SQLite.
+                        # Preserve the existing SQLite history format.
                         timestamp = save_inspection(
                             uploaded_file.name,
                             detections,
-                            inference_ms,
+                            inference_ms
                         )
 
-                        # Save the latest result so downloads remain
-                        # available after Streamlit reruns.
-                        st.session_state["last_inspection"] = {
+                        all_results.append({
                             "filename": uploaded_file.name,
+                            "view": selected_view,
                             "timestamp": timestamp,
                             "detections": detections,
                             "inference_ms": inference_ms,
                             "device_name": DEVICE_NAME,
+
+                            # Original and detected images
+                            "original_bytes": original_bytes,
                             "annotated_bytes": annotated_bytes,
-                            "image_size": original_image.size,
-                        }
+
+                            "image_size": original_image.size
+                        })
+
+                        progress.progress(
+                            (index + 1) / len(inspection_files)
+                        )
+
+                    st.session_state["multi_inspection_results"] = all_results
+                    st.session_state["multi_inspection_signature"] = [
+                        (f.name, view_by_file[f"{f.name}_{i}"])
+                        for i, f in enumerate(inspection_files)
+                    ]
+
+                    status.success(
+                        f"Inspection completed for {len(all_results)} image(s)."
+                    )
 
                 except Exception as error:
-
                     st.error(f"Inspection failed: {error}")
                     st.exception(error)
 
-        # Display the last result outside the button block.
-        saved_result = st.session_state.get(
-            "last_inspection"
-        )
+            # Show results only when they correspond to the current uploads/views.
+            current_signature = [
+                (f.name, view_by_file[f"{f.name}_{i}"])
+                for i, f in enumerate(inspection_files)
+            ]
 
-        if (
-            saved_result
-            and uploaded_file is not None
-            and saved_result["filename"] == uploaded_file.name
-        ):
-
-            st.markdown("---")
-            st.subheader("Inspection Results")
-
-            detections = saved_result["detections"]
-
-            col1, col2, col3 = st.columns(3)
-
-            col1.metric(
-                "Objects detected",
-                len(detections),
+            saved_results = st.session_state.get(
+                "multi_inspection_results", []
+            )
+            saved_signature = st.session_state.get(
+                "multi_inspection_signature", []
             )
 
-            col2.metric(
-                "Inference time",
-                f'{saved_result["inference_ms"]:.2f} ms',
-            )
+            if saved_results and saved_signature == current_signature:
+                st.markdown("---")
+                st.subheader("Per-View Inspection Results")
 
-            col3.metric(
-                "Inference device",
-                saved_result["device_name"],
-            )
-
-            st.caption(
-                "Inference time measures the warmed-up prediction call. "
-                "It excludes model loading, annotation drawing, and "
-                "database saving."
-            )
-
-            annotated_image = Image.open(
-                io.BytesIO(saved_result["annotated_bytes"])
-            )
-
-            st.image(
-                annotated_image,
-                caption="YOLO26 predictions",
-                width=700,
-            )
-
-            if detections:
-
-                detection_df = pd.DataFrame([
-                    {
-                        "Class": item["class"],
-                        "Confidence (%)": round(
-                            item["confidence"] * 100, 2
-                        ),
-                        "Bounding box": str(item["bbox"]),
-                    }
-                    for item in detections
-                ])
-
-                st.dataframe(
-                    detection_df,
-                    use_container_width=True,
-                    hide_index=True,
+                total_detections = sum(
+                    len(item["detections"]) for item in saved_results
+                )
+                total_inference_ms = sum(
+                    item["inference_ms"] for item in saved_results
                 )
 
-                st.warning("Defect candidates detected.")
-
-            else:
-
-                st.success(
-                    "No defect candidates detected above the selected "
-                    "confidence threshold. This does not guarantee "
-                    "that the surface is defect-free."
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Images Inspected", len(saved_results))
+                col2.metric("Detection Candidates", total_detections)
+                col3.metric(
+                    "Total Inference Time",
+                    f"{total_inference_ms:.2f} ms"
                 )
 
-            st.success("Inspection saved to history.")
+                for index, item in enumerate(saved_results):
+                    with st.expander(
+                        f'{item["view"]} View — {item["filename"]}',
+                        expanded=(index == 0)
+                    ):
+                        col_image, col_details = st.columns([3, 2])
 
-            # Download annotated image.
-            st.download_button(
-                "📥 Download Annotated Image",
-                data=saved_result["annotated_bytes"],
-                file_name="edgeinspect_annotated.png",
-                mime="image/png",
-                key="download_annotated_image",
-            )
+                        with col_image:
 
-            # Generate and download PDF report.
-            try:
+                             original_col, detected_col = st.columns(2)
+                        with original_col:
+                            st.markdown("**Original Image**")
 
-                pdf_bytes = generate_inspection_pdf(
-                    filename=saved_result["filename"],
-                    timestamp=saved_result["timestamp"],
-                    detections=detections,
-                    inference_ms=saved_result["inference_ms"],
-                    device_name=saved_result["device_name"],
-                    annotated_image_bytes=saved_result[
-                        "annotated_bytes"
-                    ],
-                    image_size=saved_result["image_size"],
+                            st.image(
+                                item["original_bytes"],
+                                use_container_width=True
+                            )
+
+                        with detected_col:
+                            st.markdown("**Detected Image**")
+
+                            st.image(
+                                item["annotated_bytes"],
+                                use_container_width=True
+                            )    
+
+                        with col_details:
+                            metric1, metric2 = st.columns(2)
+                            metric1.metric(
+                                "Candidates",
+                                len(item["detections"])
+                            )
+                            metric2.metric(
+                                "Inference",
+                                f'{item["inference_ms"]:.2f} ms'
+                            )
+
+                            st.caption(
+                                f'Device: {item["device_name"]} · '
+                                f'Time: {item["timestamp"]}'
+                            )
+
+                            if item["detections"]:
+                                detection_df = pd.DataFrame([
+                                    {
+                                        "Class": detection["class"],
+                                        "Confidence (%)": round(
+                                            detection["confidence"] * 100, 2
+                                        ),
+                                        "Bounding box": str(detection["bbox"])
+                                    }
+                                    for detection in item["detections"]
+                                ])
+                                st.dataframe(
+                                    detection_df,
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+                                st.warning(
+                                    "Defect candidates detected in this image."
+                                )
+                            else:
+                                st.success(
+                                    "No candidates detected above the selected "
+                                    "confidence threshold. This does not prove "
+                                    "the surface is defect-free."
+                                )
+
+                        st.download_button(
+                            "📥 Download Annotated Image",
+                            data=item["annotated_bytes"],
+                            file_name=(
+                                f'edgeinspect_{item["view"].lower()}_'
+                                f'{Path(item["filename"]).stem}.png'
+                            ),
+                            mime="image/png",
+                            key=f"download_multi_image_{index}"
+                        )
+
+                        # Keep the existing individual PDF report feature.
+                        try:
+                            pdf_bytes = generate_inspection_pdf(
+                                filename=item["filename"],
+                                timestamp=item["timestamp"],
+                                detections=item["detections"],
+                                inference_ms=item["inference_ms"],
+                                device_name=item["device_name"],
+                                annotated_image_bytes=item["annotated_bytes"],
+                                image_size=item["image_size"]
+                            )
+
+                            st.download_button(
+                                "📄 Download PDF Report",
+                                data=pdf_bytes,
+                                file_name=(
+                                    f'edgeinspect_{item["view"].lower()}_'
+                                    f'{Path(item["filename"]).stem}.pdf'
+                                ),
+                                mime="application/pdf",
+                                key=f"download_multi_pdf_{index}"
+                            )
+
+                        except Exception as error:
+                            st.error(
+                                f"Could not generate PDF report: {error}"
+                            )
+
+                st.caption(
+                    "Each image is processed independently. The view label "
+                    "organizes the results; it does not identify the same "
+                    "physical defect across different views."
                 )
 
-                st.download_button(
-                    "📄 Download PDF Inspection Report",
-                    data=pdf_bytes,
-                    file_name="edgeinspect_inspection_report.pdf",
-                    mime="application/pdf",
-                    key="download_pdf_report",
-                )
 
-            except Exception as error:
-
-                st.error(
-                    f"Could not generate PDF report: {error}"
-                )
 
 # ============================================================
 # TAB 2: DASHBOARD & INSPECTION HISTORY
@@ -1579,20 +1849,10 @@ if selected_page == "ℹ️ About":
     # MODEL INFORMATION
     # --------------------------------------------------------
 
-    st.subheader("🧠 Model Information")
-
-    st.write(f"**Model path:** `{MODEL_PATH}`")
-    st.write(f"**Dataset:** NEU-DET")
-    st.write(f"**Image size:** {IMAGE_SIZE} × {IMAGE_SIZE}")
-    st.write(f"**Number of classes:** {len(CLASS_NAMES)}")
-
-    if MODEL_PATH.exists():
-        st.success("Model checkpoint file exists.")
-    else:
-        st.error(
-            "Model checkpoint was not found. "
-            "Check the models/best.pt path."
-        )
+    st.write("**Detection Model:** YOLO26n")
+    st.write("**Dataset:** NEU-DET")
+    st.write(f"**Input Image Size:** {IMAGE_SIZE} × {IMAGE_SIZE}")
+    st.write(f"**Supported Defect Classes:** {len(CLASS_NAMES)}")
 
     st.markdown("---")
 
