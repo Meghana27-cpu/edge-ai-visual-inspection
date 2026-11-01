@@ -1154,13 +1154,17 @@ if selected_page == "🔍 Inspect Image":
                                      "✅ Product Quality: GOOD"
                                 )
                                 st.write(
-                                     "No defects detected. The product appears "
-                                     "to be in good condition based on this inspection."
+                                     "No visible defect candidates were identified by "
+                                     "the AI model above the selected confidence threshold. "
+                                     "The inspected product appears acceptable based on "
+                                     "the current analysis."
                                 )
 
                                 st.caption(
-                                     "Automated inspection result. Final quality "
-                                     "approval should follow applicable inspection standards."
+                                     "Note: This is an AI-assisted inspection result and "
+                                     "does not guarantee that the product is completely "
+                                     "defect-free. Further manual inspection may be required "
+                                     "for quality assurance."  
                                 )
 
                         st.download_button(
