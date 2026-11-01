@@ -1151,9 +1151,16 @@ if selected_page == "🔍 Inspect Image":
                                 )
                             else:
                                 st.success(
-                                    "No candidates detected above the selected "
-                                    "confidence threshold. This does not prove "
-                                    "the surface is defect-free."
+                                     "✅ Product Quality: GOOD"
+                                )
+                                st.write(
+                                     "No defects detected. The product appears "
+                                     "to be in good condition based on this inspection."
+                                )
+
+                                st.caption(
+                                     "Automated inspection result. Final quality "
+                                     "approval should follow applicable inspection standards."
                                 )
 
                         st.download_button(
